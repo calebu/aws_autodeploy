@@ -31,7 +31,6 @@ RUN apk -U upgrade && \
     rm "${JAVA_HOME}/jre/lib/security/README.txt" && \
     apk del build-dependencies && \
     rm "/tmp/"* && \
-	wget http://78.137.98.23/task18/helloworld.war && \
-	java -jar helloworld.war
+	wget http://78.137.98.23/task18/helloworld.war
 
 EXPOSE 8080
