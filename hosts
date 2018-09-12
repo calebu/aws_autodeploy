@@ -3,6 +3,6 @@ localhost ansible_connection=local
 
 [local:vars]
 region=ap-east-1
-key_id=AKIAIW6YCOQKAG2S7WDQ
-access_key=RyV+1fh48LIUx3tAVf0SCUnOULcdgLiHHLTSBERC
+key_id= []
+access_key= []
 
