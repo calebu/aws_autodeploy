@@ -17,3 +17,17 @@ Pre-requisites:
 My development environment looked like this:
 Ubuntu linux 16 (installed packages include: python3, boto, boto3, ansible, docker, awscli)
 
+To run the ansible-playbook,
+Create an IAM user on your AWS account with default group access, note the access key ID
+Run the scripts below
+
+export AWS_ACCESS_KEY_ID=<generated access key ID>
+export AWS_SECRET_ACCESS_KEY=<generated access key>
+
+ansible-playbook entrypoint.yml
+
+
+
+
+
+
