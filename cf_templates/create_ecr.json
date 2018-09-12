@@ -1,0 +1,358 @@
+{
+  "Outputs" : {
+    "ClusterSecGroup" : {
+      "Description" : "Name of RegionalManagerSecGroup",
+      "Value" : {
+        "Ref" : "InstanceSecurityGroup"
+      }
+    }
+  },
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "Setup all ECR Resources needed for Smava webservice container",
+  "Mappings" : {
+    "ebs" : {
+      "ap-northeast-1" : {
+        "AMI" : "ami-4e6cd34f"
+      },
+      "ap-southeast-1" : {
+        "AMI" : "ami-a6a7e7f4"
+      },
+      "eu-west-1" : {
+        "AMI" : "ami-c37474b7"
+      },
+      "sa-east-1" : {
+        "AMI" : "ami-1e08d103"
+      },
+      "us-east-1" : {
+        "AMI" : "ami-1624987f"
+      },
+      "us-west-1" : {
+        "AMI" : "ami-1bf9de5e"
+      },
+      "us-west-2" : {
+        "AMI" : "ami-2a31bf1a"
+      }
+    },
+    "ephemeral" : {
+      "ap-northeast-1" : {
+        "AMI" : "ami-5a6cd35b"
+      },
+      "ap-southeast-1" : {
+        "AMI" : "ami-a8a7e7fa"
+      },
+      "eu-west-1" : {
+        "AMI" : "ami-b57474c1"
+      },
+      "sa-east-1" : {
+        "AMI" : "ami-1608d10b"
+      },
+      "us-east-1" : {
+        "AMI" : "ami-e8249881"
+      },
+      "us-west-1" : {
+        "AMI" : "ami-21f9de64"
+      },
+      "us-west-2" : {
+        "AMI" : "ami-2e31bf1e"
+      }
+    }
+  },
+  "Parameters" : {
+    "ECSHostEC2Role" : {
+      "Description" : "IAM Username",
+      "Default" : "Ansible",
+      "Type" : "String"
+    },
+    "IAMUsername" : {
+      "Description" : "IAM Username",
+      "Default" : "smava-user",
+      "Type" : "String"
+    },
+    "ClusterSize" : {
+      "Description" : "Number of nodes in the cluster",
+      "Type" : "String"
+    },
+    "DiskType" : {
+      "AllowedValues" : [
+        "ephemeral",
+        "ebs"
+      ],
+      "Default" : "ephemeral",
+      "Description" : "Type of Disk to use ( ephemeral/ebs )",
+      "Type" : "String"
+    },
+    "InstanceType" : {
+      "AllowedValues" : [
+        "t1.micro",
+        "m1.small",
+        "m1.medium",
+        "m1.large",
+        "m1.xlarge",
+        "m2.xlarge",
+        "m2.2xlarge",
+        "m2.4xlarge",
+        "c1.medium",
+        "c1.xlarge",
+        "cc1.4xlarge"
+      ],
+      "ConstraintDescription" : "must be valid instance type. ",
+      "Default" : "m1.large",
+      "Description" : "Type of EC2 instance for cluster",
+      "Type" : "String"
+    },
+    "KeyName" : {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the cluster",
+      "Type" : "String"
+    }
+  },
+  "Resources" : {
+      "VPC": {
+         "Type": "AWS::EC2::VPC",
+         "Properties": {
+            "CidrBlock": "172.31.0.0/16",
+            "Tags" : [{ "Key" : "Name", "Value" : "Smava-VPC"}]
+         }
+      },
+      "InternetGateway": {
+         "Type": "AWS::EC2::InternetGateway",
+         "Properties": {
+            "Tags" : [{ "Key" : "Name", "Value" : "Smava NGINX IGW"}]
+         }
+      },
+      "VPCIGW": {
+         "Type": "AWS::EC2::VPCGatewayAttachment",
+         "Properties": {
+            "VpcId": {
+              "Ref": "VPC"
+            },
+            "InternetGatewayId": {
+               "Ref": "InternetGateway"
+            }
+         }
+      },
+      "IGWRoute": {
+         "Type": "AWS::EC2::Route",
+         "Properties": {
+            "RouteTableId": {
+               "Ref": "PublicRouteTable"
+            },
+            "DestinationCidrBlock": "0.0.0.0/0",
+            "GatewayId": {
+               "Ref": "InternetGateway"
+            }
+         }
+      },
+      "NGINXSubnet": {
+         "Type": "AWS::EC2::Subnet",
+         "Properties": {
+            "VpcId": { "Ref" : "VPC" },
+            "AvailabilityZone": "us-east-1a",
+            "CidrBlock": "172.31.1.0/24",
+            "MapPublicIpOnLaunch": true,
+            "Tags" : [{ "Key" : "Name", "Value" : "NGINX-Proxy-Public-Subnet"}]
+         }
+      },
+      "ECSPrivateSubnet": {
+         "Type": "AWS::EC2::Subnet",
+         "Properties": {
+            "VpcId": { "Ref" : "VPC" },
+            "AvailabilityZone": "us-east-1a",
+            "CidrBlock": "172.31.2.0/24",
+            "MapPublicIpOnLaunch": false,
+            "Tags" : [{ "Key" : "Name", "Value" : "ECS-Instances-Private-Subnet"}]
+         }
+      },
+      "PublicRouteTable": {
+         "Type": "AWS::EC2::RouteTable",
+         "Properties": {
+            "VpcId": {"Ref" : "VPC"}
+         }
+      },
+      "NGINXSubnetIGWAssociation": {
+         "Type": "AWS::EC2::SubnetRouteTableAssociation",
+         "Properties": {
+            "RouteTableId": { "Ref" : "PublicRouteTable" },
+            "SubnetId": { "Ref" : "NGINXSubnet" }
+         }
+      },
+      "ECSSecurityGroup": {
+       "Type": "AWS::EC2::SecurityGroup",
+       "Properties": {
+          "GroupName": "Internet Group",
+          "GroupDescription": "SSH traffic in, all traffic out.",
+          "VpcId": {"Ref" : "VPC"},
+          "SecurityGroupIngress": [
+             {
+                "IpProtocol": "tcp",
+                "FromPort": "22",
+                "ToPort": "22",
+                "CidrIp": "0.0.0.0/0"
+             }
+          ],
+          "SecurityGroupEgress": [
+             {
+                "IpProtocol": -1,
+                "CidrIp": "0.0.0.0/0"
+             }
+          ]
+       }
+      },
+    "InstanceSecurityGroup" : {
+      "Properties" : {
+        "GroupDescription" : "Enable SSH access via port 22",
+        "SecurityGroupIngress" : [
+          {
+            "CidrIp" : "0.0.0.0/0",
+            "FromPort" : "22",
+            "IpProtocol" : "tcp",
+            "ToPort" : "22"
+          }
+        ]
+      },
+      "Type" : "AWS::EC2::SecurityGroup"
+    },
+      "NGINXEC2Instance": {
+         "Type": "AWS::EC2::Instance",
+         "Properties": {
+            "SubnetId": { "Ref" : "NGINXSubnet" },
+            "ImageId": "ami-04681a1dbd79675a5",
+            "InstanceType": "t2.medium",
+            "KeyName": "smava-key",
+            "SecurityGroupIds": [{
+               "Ref": "ECSSecurityGroup"
+            }],
+            "Tags" : [{ "Key" : "Name", "Value" : "NGINX Proxy Webserver"}]
+         },
+      },
+      "ECSMainCluster": {
+        "Type": "AWS::ECS::Cluster",
+        "Properties": {
+            "ClusterName": "Smava-ECS-Cluster"
+        }
+     },
+    "ContainerHostInstances": {
+        "Type": "AWS::AutoScaling::LaunchConfiguration",
+        "Properties": {
+            "ImageId": "ami-0254e5972ebcd132c",
+            "SecurityGroups": [
+                { "Ref": "ECSSecurityGroup" }
+            ],
+            "InstanceType": "t2.medium",
+            "IamInstanceProfile": { "Ref": "ECSHostEC2InstanceProfile" },
+            "KeyName": "smava-key",
+            "UserData": {
+                "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "#!/bin/bash -xe\n",
+                            "echo ECS_CLUSTER=",
+                            {
+                                "Ref": "ECSMainCluster"
+                            },
+                            " >> /etc/ecs/ecs.config\n",
+                            "yum install -y aws-cfn-bootstrap\n",
+                            "/opt/aws/bin/cfn-signal -e $? ",
+                            "         --stack ",
+                            {
+                                "Ref": "AWS::StackName"
+                            },
+                            "         --resource ECSAutoScalingGroup ",
+                            "         --region ",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "\n"
+                        ]
+                    ]
+                }
+            }
+        }
+    },
+    "ECSHostEC2InstanceProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+        "Properties": {
+            "Path": "/",
+            "Roles": [
+                {
+                    "Ref": "ECSHostEC2Role"
+                }
+            ]
+        }
+    },
+    "ECSAutoScalingGroup": {
+        "Type": "AWS::AutoScaling::AutoScalingGroup",
+        "Properties": {
+            "VPCZoneIdentifier": [
+                { "Ref": "NGINXSubnet" },
+            ],
+            "LaunchConfigurationName": {
+                "Ref": "ContainerHostInstances"
+            },
+            "MinSize": "3",
+            "MaxSize": "6",
+            "DesiredCapacity": "3",
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "smava-ecs-instance",
+                    "PropagateAtLaunch": true
+                }
+            ]
+        },
+        "CreationPolicy": {
+            "ResourceSignal": {
+                "Timeout": "PT5M"
+            }
+        },
+        "UpdatePolicy": {
+            "AutoScalingReplacingUpdate": {
+                "WillReplace": "true"
+            }
+        }
+    },
+    "smavarepo":{
+      "Type":"AWS::ECR::Repository",
+      "Properties":{
+        "RepositoryName":"smavaecrrepo",
+        "RepositoryPolicyText":{
+          "Version":"2008-10-17",
+          "Statement":[
+            {
+              "Sid":"AllowPushPull",
+              "Effect":"Allow",
+              "Principal":{
+                "AWS":[
+                  {
+                    "Fn::Join":[
+                      "",
+                      [
+                        "arn:aws:iam::",
+                        {
+                          "Ref":"AWS::AccountId"
+                        },
+                        ":user/",
+                        {
+                          "Ref":"IAMUsername"
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "Action":[
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:PutImage",
+                "ecr:InitiateLayerUpload",
+                "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

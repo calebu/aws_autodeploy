@@ -1,0 +1,78 @@
+#This is the base YML file for the task
+#It is sibdivided into 3 tasks
+#task 1 creates the AWS Elastic Container Service stack for hosting the docker image, consisting of the ECR, ECS instances, Cluster etc, and the NGINX proxy server
+#task 2 builds and tags the docker image and pushes the image to the repo
+#task 3 creates the ECS task definitions and service
+
+---
+- hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  vars:
+    ami: "ami-0b59bfac6be064b78"
+    region: "us-east-1"
+    type: "t2.micro"
+    sshkey: "smava-keypair"
+    vpcid: "vpc-7ddf0c07"
+    KeyName: "MyEC2"
+    InstanceType: "t2.micro"
+    SSHLocation: "0.0.0.0/0"
+    image_name : "smavaecrrepo/helloworld"
+    image_version : "latest"
+
+  tasks:
+  - name: Create a new EC2 key to be used for ECR stack creation
+    ec2_key:
+            name: smava-key
+            region: us-east-1
+    register: ec2_key_result
+ 
+  - name: Save private key
+    copy: content="{{ ec2_key_result.key.private_key }}" dest="./aws.smava.pem" mode=0600
+    when: ec2_key_result.changed
+  - name: Create ECR stack
+    cloudformation: >
+      stack_name="SmavaECRStack" state=present
+      region=us-east-1 disable_rollback=true
+      template=cf_templates/create_ecr.json
+    args:
+      template_parameters:
+        KeyName: smava-key
+        DiskType: ephemeral
+        InstanceType: m1.small
+        ClusterSize: 3
+    register: stack
+    ignore_errors: yes
+  - name: build docker image
+    docker_image: 
+      path: ./
+      name: "{{ image_name }}"
+      tag: "{{ image_version }}"
+  - name: docker login (must `--no-include-email`)
+    shell: "$(aws ecr get-login --region {{ region }} --no-include-email)"
+    args:
+      executable: /bin/bash
+  - name: add tag
+    docker_image:
+      name: "{{ image_name }}:{{ image_version }}"
+      repository: "{{ ecr_repo.repository.repositoryUri }}"
+      tag: "{{ ecr_repo.repository.repositoryUri }}:{{ image_version }}"
+
+  - name: push image to ecr
+    docker_image:
+      name: "{{ ecr_repo.repository.repositoryUri }}:{{ image_version }}"
+      push: yes
+  - name: Create ECR stack
+    cloudformation: >
+      stack_name="ECRServices" state=present
+      region=us-east-1 disable_rollback=true
+      template=cf_templates/setup_ecr_services.json
+    args:
+      template_parameters:
+        KeyName: smava-key
+        DiskType: ephemeral
+        InstanceType: m1.small
+        ClusterSize: 3
+    register: stack
+    ignore_errors: yes
+

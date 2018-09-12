@@ -1,5 +1,5 @@
+#Docker file to create Image with Oracle-JDK8, based on Apline 3.8
 FROM alpine:3.8
-MAINTAINER Caleb Adeyemi
 
 ENV JAVA_VERSION=8 \
     JAVA_UPDATE=181 \
@@ -31,6 +31,5 @@ RUN apk -U upgrade && \
     rm "${JAVA_HOME}/jre/lib/security/README.txt" && \
     apk del build-dependencies && \
     rm "/tmp/"* && \
+	java -version && \
 	wget http://78.137.98.23/task18/helloworld.war
-
-EXPOSE 8080
