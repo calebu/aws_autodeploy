@@ -22,8 +22,8 @@ Create an IAM user on your AWS account with default group access, note the acces
 Run the scripts below
 
 
-#export AWS_ACCESS_KEY_ID=<generated access key ID>
-#export AWS_SECRET_ACCESS_KEY=<generated access key>
+#export AWS_ACCESS_KEY_ID= [generated access key ID]
+#export AWS_SECRET_ACCESS_KEY= [generated access key]
 
 #ansible-playbook entrypoint.yml
 
